@@ -20,8 +20,10 @@ namespace ShooterTutorial
 
         GraphicsDeviceManager _graphics;
         SpriteBatch _spriteBatch;
-        public Player _player;
+        Player _player;
         Weapon _weapon;
+
+        List<Weapon> _weaponList;
 
         Texture2D _mainBackground;
         ParallaxingBackground _bgLayer1;
@@ -51,9 +53,16 @@ namespace ShooterTutorial
         TimeSpan enemySpawnTime;
         TimeSpan previousSpawnTime;
 
+        TimeSpan powerupSpawnTime;
+        TimeSpan previousPowerupSpawnTime;
+        float powerupMinSpawnTime = 2.0f;
+        float powerupMaxSpawnTime = 8.0f;
+
         //Enemies
         Texture2D enemyTexture;
         List<Enemy> enemies;
+
+        Powerup powerup;
 
         // a random number gen
         Random random;
@@ -80,7 +89,13 @@ namespace ShooterTutorial
         {
             // TODO: Add your initialization logic here
             _player = new Player();
-            _weapon = new Weapon(this);
+            _weapon = new Weapon(this, _player);
+
+            _weaponList = new List<Weapon>();
+
+            _weaponList.Add(new Bazooka(this, _player));
+            _weaponList.Add(new WaveWeapon(this, _player));
+            _weaponList.Add(new SinusShot(this, _player));
 
             _bgLayer1 = new ParallaxingBackground();
             _bgLayer2 = new ParallaxingBackground();
@@ -176,6 +191,8 @@ namespace ShooterTutorial
             // update the enemies
             UpdateEnemies(gameTime);
 
+            UpdatePowerup(gameTime);
+
             // update collisons
             UpdateCollision();
 
@@ -249,12 +266,22 @@ namespace ShooterTutorial
 
             if (_currentKeyboardState.IsKeyDown(Keys.NumPad1))
             {
-                _weapon = new Weapon(this);
+                _weapon = new Weapon(this, _player);
             }
 
             if (_currentKeyboardState.IsKeyDown(Keys.NumPad2))
             {
-                _weapon = new TripleWeapon(this);
+                _weapon = new TripleWeapon(this, _player);
+            }
+
+            if (_currentKeyboardState.IsKeyDown(Keys.NumPad3))
+            {
+                _weapon = new AdnWeapon(this, _player);
+            }
+
+            if (_currentKeyboardState.IsKeyDown(Keys.NumPad4))
+            {
+                _weapon = new WaveWeapon(this, _player);
             }
 
             // Make sure that the player does not go out of bounds
@@ -295,6 +322,11 @@ namespace ShooterTutorial
             {
                 e.Draw(_spriteBatch);
             };
+
+            if(powerup!=null)
+            {
+                powerup.Draw(_spriteBatch);
+            }
 
             // draw explosions
             foreach(var e in explosions)
@@ -374,6 +406,59 @@ namespace ShooterTutorial
             }
         }
 
+        protected void UpdatePowerup(GameTime gameTime)
+        {
+            if (powerup != null)
+            {
+                powerup.Update(gameTime);
+
+                if (!powerup.Active)
+                {
+                    powerup = null;
+                    previousPowerupSpawnTime = gameTime.TotalGameTime;
+
+
+                    powerupSpawnTime =TimeSpan.FromSeconds(powerupMinSpawnTime + ( powerupMaxSpawnTime - powerupMinSpawnTime ) * random.NextDouble());
+                }
+            }
+            else
+            {
+                if (gameTime.TotalGameTime - previousPowerupSpawnTime > powerupSpawnTime)
+                {
+                    previousPowerupSpawnTime = gameTime.TotalGameTime;
+
+
+                    Animation enemyAnimation = new Animation();
+
+                    // Init the animation with the correct 
+                    // animation information
+                    enemyAnimation.Initialize(enemyTexture,
+                        Vector2.Zero,
+                        47,
+                        61,
+                        8,
+                        30,
+                        Color.White,
+                        1f,
+                        true);
+
+                    // randomly generate the postion of the enemy
+                    Vector2 position = new Vector2(
+                        random.Next(100, GraphicsDevice.Viewport.Width - 100),
+                        random.Next(100, GraphicsDevice.Viewport.Height - 100)
+                        );
+
+
+                    int value = random.Next(_weaponList.Count);
+
+                    powerup = new Powerup(enemyAnimation, position, _weaponList[value]);
+                    // add an enemy
+                    //AddEnemy();
+                }
+            }
+
+        }
+
         protected void AddEnemy()
         {
             // create the animation object
@@ -399,15 +484,17 @@ namespace ShooterTutorial
             // create an enemy
             Enemy enemy = new Enemy();
 
+            var m = new LinearMovement(position, new Vector2(-1f, 0f));
+            m.MoveSpeed = 10f;
             // init the enemy
-            enemy.Initialize(enemyAnimation, position);
+            enemy.Initialize(enemyAnimation, m);
 
             // Add the enemy to the active enemies list
             enemies.Add(enemy);
 
         }
 
-      
+
         protected void UpdateCollision()
         {
 
@@ -426,7 +513,7 @@ namespace ShooterTutorial
                 _player.Height);
 
             // detect collisions between the player and all enemies.
-            for(var i = 0; i < enemies.Count; i++)
+            for (var i = 0; i < enemies.Count; i++)
             {
                 enemyRectangle = new Rectangle(
                    (int)enemies[i].Position.X,
@@ -475,6 +562,23 @@ namespace ShooterTutorial
                         // kill off the laserbeam
                         laserBeams[l].Active = false;
                     }
+                }
+            }
+
+            if (powerup != null)
+            {
+                var powerupRectangle = new Rectangle(
+                    (int)powerup.Position.X,
+                    (int)powerup.Position.Y,
+                    powerup.Width,
+                    powerup.Height);
+
+                // determine if the player and the enemy intersect.
+                if (playerRectangle.Intersects(powerupRectangle))
+                {
+                    powerup.Active = false;
+
+                    _weapon = powerup.Weapon;
                 }
             }
         }
